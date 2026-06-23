@@ -189,196 +189,164 @@ def create_pdf(p_name, p_age, p_gender, p_id, symptoms, prediction, confidence, 
 
 
 # --------------------------
-# 1. PATIENT REGISTRATION SECTION
+# STATE INITIALIZATION
 # --------------------------
-st.title("🏥 Patient Registration")
-
 if "patient_registered" not in st.session_state:
     st.session_state.patient_registered = False
     st.session_state.p_id = generate_patient_id()
 
-col_a, col_b, col_c = st.columns([2, 1, 1])
-with col_a:
-    p_name = st.text_input("Full Name", value="John Doe", disabled=st.session_state.patient_registered)
-with col_b:
-    p_age = st.number_input("Age", min_value=1, max_value=120, value=30, disabled=st.session_state.patient_registered)
-with col_c:
-    p_gender = st.selectbox("Gender", ["Male", "Female", "Other"], disabled=st.session_state.patient_registered)
 
-st.text_input("Generated Patient ID", value=st.session_state.p_id, disabled=True)
-
+# --------------------------
+# PAGE 1: PATIENT REGISTRATION
+# --------------------------
 if not st.session_state.patient_registered:
-    if st.button("Complete Registration", use_container_width=True):
-        st.session_state.patient_registered = True
-        st.session_state.p_name = p_name
-        st.session_state.p_age = p_age
-        st.session_state.p_gender = p_gender
-        st.success(f"✅ Registered successfully as {p_name}! Proceed to check symptoms below.")
+    st.title("🏥 Patient Registration")
+    st.write("Please fill out your general information to unlock the diagnostic window.")
+    
+    reg_name = st.text_input("Full Name", value="")
+    
+    col_x, col_y = st.columns(2)
+    with col_x:
+        reg_age = st.number_input("Age", min_value=1, max_value=120, value=25)
+    with col_y:
+        reg_gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+        
+    st.text_input("Assigned Patient ID", value=st.session_state.p_id, disabled=True)
+
+    if st.button("Complete Registration & Open Checker", use_container_width=True):
+        if not reg_name.strip():
+            st.error("Please provide a name to complete your registration.")
+        else:
+            # Store inputs to memory and toggle screen layout
+            st.session_state.p_name = reg_name
+            st.session_state.p_age = reg_age
+            st.session_state.p_gender = reg_gender
+            st.session_state.patient_registered = True
+            st.rerun()
+
+
+# --------------------------
+# PAGE 2: AI SYMPTOM CHECKER
+# --------------------------
 else:
-    if st.button("Edit Registration Info", use_container_width=True):
+    st.title("🩺 AI Symptom Checker")
+    
+    # Active patient identification header
+    st.success(f"📋 **Active Case File:** {st.session_state.p_name} ({st.session_state.p_age} yrs | {st.session_state.p_gender}) | Patient ID: `{st.session_state.p_id}`")
+    
+    if st.button("⬅️ Clear File & Register New Patient"):
         st.session_state.patient_registered = False
+        st.session_state.p_id = generate_patient_id()
         st.rerun()
 
-st.markdown("---")
+    st.markdown("---")
 
+    # Browser Microphone Speech Capture Tool
+    st.subheader("🎙️ Dictate Your Symptoms")
+    st.write("Click the button below to transcribe your voice directly into text:")
 
-# --------------------------
-# 2. MAIN SYMPTOM CHECKER & VOICE SECTION
-# --------------------------
-st.title("🩺 AI Symptom Checker")
+    voice_component = """
+    <div style="text-align: center; margin-bottom: 10px;">
+        <button id="record_btn" style="background-color: #ff4b4b; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%;">
+            🎤 Click to Speak (Listen Microphone)
+        </button>
+        <p id="status" style="color: gray; font-style: italic; margin-top: 5px;">Microphone status: Ready...</p>
+    </div>
 
-# Query parameters for live voice dictionary updates
-if "voice_text" not in st.session_state:
-    st.session_state.voice_text = ""
-
-# Injected Web Speech Recognition Controller API Button
-st.subheader("🎙️ Dictate Your Symptoms")
-st.write("Click the button below to translate your spoken voice directly into text:")
-
-voice_component = """
-<div style="text-align: center; margin-bottom: 10px;">
-    <button id="record_btn" style="background-color: #ff4b4b; color: white; border: none; padding: 12px 24px; font-size: 16px; font-weight: bold; border-radius: 8px; cursor: pointer; width: 100%;">
-        🎤 Click to Speak (Listen Microphone)
-    </button>
-    <p id="status" style="color: gray; font-style: italic; margin-top: 5px;">Microphone ready...</p>
-</div>
-
-<script>
-    const recordBtn = document.getElementById('record_btn');
-    const statusText = document.getElementById('status');
-    
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-        statusText.innerText = "Speech recognition is not supported by your current browser browser environment.";
-        recordBtn.disabled = true;
-    } else {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
+    <script>
+        const recordBtn = document.getElementById('record_btn');
+        const statusText = document.getElementById('status');
         
-        recordBtn.addEventListener('click', () => {
-            recognition.start();
-            statusText.innerText = "Listening closely... Speak now!";
-            recordBtn.style.backgroundColor = "#ff1a1a";
-        });
+        const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
         
-        recognition.onresult = (event) => {
-            const transcript = event.results[0][0].transcript;
-            statusText.innerText = "Speech captured!";
-            recordBtn.style.backgroundColor = "#22bb22";
-            recordBtn.innerText = "Speech Recorded ✅";
+        if (!SpeechRecognition) {
+            statusText.innerText = "Speech capture functions are unavailable on this browser framework configuration.";
+            recordBtn.disabled = true;
+        } else {
+            const recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'en-US';
+            recognition.interimResults = false;
             
-            // Pass value safely to Streamlit parent session frame via textarea selector injection
-            window.parent.postMessage({
-                type: 'streamlit:set_widget_value',
-                value: transcript
-            }, '*');
+            recordBtn.addEventListener('click', () => {
+                recognition.start();
+                statusText.innerText = "Listening closely... Speak your symptoms now!";
+                recordBtn.style.backgroundColor = "#ff1a1a";
+            });
             
-            // Fallback backup manual visual alert prompt helper
-            alert("Voice Captured text: \\"" + transcript + "\\". Please paste or verify it in the textbox field below!");
-        };
-        
-        recognition.onerror = (event) => {
-            statusText.innerText = "Error encountered: " + event.error;
-            recordBtn.style.backgroundColor = "#ff4b4b";
-        };
-        
-        recognition.onend = () => {
-            if(statusText.innerText === "Listening closely... Speak now!") {
-                statusText.innerText = "Stopped listening.";
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                statusText.innerText = "Speech captured!";
+                recordBtn.style.backgroundColor = "#22bb22";
+                recordBtn.innerText = "Speech Recorded ✅";
+                
+                // Set the value directly to the parent context container frame
+                window.parent.postMessage({
+                    type: 'streamlit:set_widget_value',
+                    value: transcript
+                }, '*');
+                
+                alert("Captured Voice Text: \\"" + transcript + "\\". Please verify details inside the text box field below.");
+            };
+            
+            recognition.onerror = (event) => {
+                statusText.innerText = "Error: " + event.error;
                 recordBtn.style.backgroundColor = "#ff4b4b";
-            }
-        };
-    }
-</script>
-"""
-components.html(voice_component, height=100)
+            };
+        }
+    </script>
+    """
+    components.html(voice_component, height=100)
 
-# Input symptom text box
-symptoms = st.text_area("Symptoms Box (Review or write your symptoms here):", value=st.session_state.voice_text, height=150)
-days = st.number_input("How many days have you experienced these symptoms?", min_value=1, max_value=365, value=1)
+    # Core intake entry elements
+    symptoms = st.text_area("Symptoms Box (Review or write your symptoms here):", height=150)
+    days = st.number_input("How many days have you experienced these symptoms?", min_value=1, max_value=365, value=1)
 
-if st.button("Run Diagnostic Prediction", use_container_width=True):
-    if not symptoms.strip():
-        st.warning("Please enter or dictate your symptoms before running a diagnostic assessment.")
-    elif not st.session_state.patient_registered:
-        st.error("Please complete the Patient Registration section at the top of the page first.")
-    else:
-        # Machine learning evaluation processing 
-        prediction = model.predict([symptoms])[0]
+    if st.button("Run Diagnostic Prediction", use_container_width=True):
+        if not symptoms.strip():
+            st.warning("Please supply or record your symptom text inputs first.")
+        else:
+            prediction = model.predict([symptoms])[0]
 
-        try:
-            probs = model.predict_proba([symptoms])[0]
-            confidence = round(max(probs) * 100, 2)
-        except Exception:
-            confidence = round(random.uniform(85, 99), 2)
+            try:
+                probs = model.predict_proba([symptoms])[0]
+                confidence = round(max(probs) * 100, 2)
+            except Exception:
+                confidence = round(random.uniform(85, 99), 2)
 
-        severity = calculate_severity(days)
-        report_id = generate_report_id()
+            severity = calculate_severity(days)
+            report_id = generate_report_id()
 
-        # Dynamic live pipeline search call out to Wikipedia API
-        url, topic, wiki_description = wiki_search(prediction)
-        if not wiki_description:
-            wiki_description = "No structured overview data returned from digital index books for this diagnostic term."
+            # Dynamic medical description dictionary matching from Wikipedia API
+            url, topic, wiki_description = wiki_search(prediction)
+            if not wiki_description:
+                wiki_description = "No specific reference medical documentation found within external encyclopedia pipelines."
 
-        # Metrics visual blocks layout
-        st.success(f"🦠 Predicted Condition: **{prediction}**")
+            # Result summaries output layout
+            st.success(f"🦠 Predicted Disease: **{prediction}**")
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Prediction Confidence", f"{confidence}%")
-        with col2:
-            severity_color = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}
-            st.metric("Condition Severity", f"{severity_color.get(severity, '')} {severity}")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Confidence Score", f"{confidence}%")
+            with col2:
+                severity_color = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}
+                st.metric("Estimated Severity", f"{severity_color.get(severity, '')} {severity}")
 
-        st.markdown("---")
+            st.markdown("---")
 
-        # Wiki context output field card
-        st.subheader("📚 Automated Medical Reference Insight")
-        st.info(wiki_description)
-        if url:
-            st.markdown(f"🔗 [Explore the full Wikipedia article on {topic}]({url})")
+            # Reference data card block
+            st.subheader("📚 Automated Medical Reference Insight")
+            st.info(wiki_description)
+            if url:
+                st.markdown(f"🔗 [Explore the full Wikipedia article on {topic}]({url})")
 
-        # Static mapped precautions renderer blocks
-        st.subheader("🛡️ Recommended Precaution Guidelines")
-        precautions_list = disease_precautions.get(prediction, [
-            "Consult a qualified doctor immediately",
-            "Drink plenty of water and rest well",
-            "Avoid self-medication without professional advice",
-            "Monitor symptoms and seek emergency help if worsening",
-        ])
-        for i, p in enumerate(precautions_list, 1):
-            st.markdown(f"**{i}.** ✅ {p}")
-
-        st.markdown("---")
-
-        # Report compilation output loop triggered
-        pdf = create_pdf(
-            st.session_state.get("p_name", "Guest"),
-            st.session_state.get("p_age", 30),
-            st.session_state.get("p_gender", "Other"),
-            st.session_state.p_id,
-            symptoms,
-            prediction,
-            confidence,
-            severity,
-            wiki_description,
-        )
-
-        st.download_button(
-            "📄 Download Official Assessment Report (PDF)",
-            pdf,
-            "medical_report.pdf",
-            "application/pdf",
-            use_container_width=True,
-        )
-
-# --------------------------
-# FOOTER
-# --------------------------
-st.markdown("---")
-st.caption(
-    "AI Symptom Checker | Registration Profile + Browser Web Speech Voice Intake + Live Wiki Pipeline"
-)
+            # Action guideline directory lookup
+            st.subheader("🛡️ Recommended Precaution Guidelines")
+            precautions_list = disease_precautions.get(prediction, [
+                "Consult a qualified doctor immediately",
+                "Drink plenty of water and rest well",
+                "Avoid self-medication without professional advice",
+                "Monitor symptoms and seek emergency help if worsening",
+            ])
+            for i, p in enumerate(precautions_list, 1):
+                st.markdown(f"**{i}.** ✅ {p}")
