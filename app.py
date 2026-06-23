@@ -49,7 +49,6 @@ def calculate_severity(days):
 
 
 def wiki_search(query):
-    """Searches Wikipedia and returns a structured (URL, Title, Summary) tuple."""
     wiki_wiki = wikipediaapi.Wikipedia(
         user_agent="AISymptomCheckerSearch/1.0 (contact: your-email@example.com)",
         language="en",
@@ -154,29 +153,24 @@ def create_pdf(p_name, p_age, p_gender, p_id, symptoms, prediction, confidence, 
     styles = getSampleStyleSheet()
     elements = []
 
-    # Title Banner Block
     elements.append(Paragraph("AI Symptom Checker - Clinical Report Summary", styles["Title"]))
     elements.append(Spacer(1, 15))
     
-    # Patient Data Information Fields
     elements.append(Paragraph(f"<b>Patient Reference ID:</b> {p_id}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Patient Name:</b> {p_name}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Age:</b> {p_age} | <b>Gender:</b> {p_gender}", styles["Normal"]))
     elements.append(Spacer(1, 10))
     
-    # Analysis Metrics
     elements.append(Paragraph(f"<b>Symptoms Analyzed:</b> {symptoms}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Predicted Condition:</b> {prediction}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Model Prediction Confidence:</b> {confidence}%", styles["Normal"]))
     elements.append(Paragraph(f"<b>Estimated Case Severity:</b> {severity}", styles["Normal"]))
     elements.append(Spacer(1, 15))
 
-    # Reference Medical Insight Literature Block
     elements.append(Paragraph("Condition Details (Automated Reference Material):", styles["Heading2"]))
     elements.append(Paragraph(wiki_desc, styles["Normal"]))
     elements.append(Spacer(1, 12))
 
-    # Action Items List
     elements.append(Paragraph("Recommended Action Plan & Critical Precautions:", styles["Heading2"]))
     precautions = disease_precautions.get(prediction, [
         "Consult a qualified doctor immediately",
@@ -223,9 +217,8 @@ if not st.session_state.patient_registered:
 
     if st.button("Complete Registration & Open Checker", use_container_width=True):
         if not reg_name.strip():
-            st.error("Please fill in a valid patient name string to register a profile database index.")
+            st.error("Please fill in a valid patient name string to register a profile.")
         else:
-            # Commit attributes safely into execution engine memory state fields
             st.session_state.p_name = reg_name
             st.session_state.p_age = reg_age
             st.session_state.p_gender = reg_gender
@@ -239,7 +232,6 @@ if not st.session_state.patient_registered:
 else:
     st.title("🩺 AI Symptom Checker")
     
-    # Active Patient Information Visual Banner Frame 
     st.success(f"📋 **Active Case File:** {st.session_state.p_name} ({st.session_state.p_age} Years | {st.session_state.p_gender}) | Patient ID: `{st.session_state.p_id}`")
     
     if st.button("⬅️ Clear Current Case File & Register Another Patient"):
@@ -249,9 +241,17 @@ else:
 
     st.markdown("---")
 
-    # Injected Browser Speech Synthesis Framework Controller Button
+    # ----------------------------------------------------
+    # UPDATED FIXED VOICE DICTATION LOGIC
+    # ----------------------------------------------------
     st.subheader("🎙️ Dictate Your Symptoms")
-    st.write("Click the recording track bar below to capture your voice live via the browser:")
+    st.write("Click the recording button below and speak. Your voice will automatically type directly into the input window box below:")
+
+    # Handle incoming token transfers smoothly from the iframe bridge
+    voice_value = ""
+    query_params = st.query_params
+    if "voice_input" in query_params:
+        voice_value = query_params["voice_input"]
 
     voice_component = """
     <div style="text-align: center; margin-bottom: 10px;">
@@ -288,13 +288,19 @@ else:
                 recordBtn.style.backgroundColor = "#22bb22";
                 recordBtn.innerText = "Voice Recorded ✅";
                 
-                // Dispatches string variables up through the stream architecture layers
-                window.parent.postMessage({
-                    type: 'streamlit:set_widget_value',
-                    value: transcript
-                }, '*');
-                
-                alert("Voice Captured Text: \\"" + transcript + "\\". Double-check the text field layout contents below.");
+                // Direct DOM Injection trick: find text box container inside Streamlit main layout window and type into it instantly
+                try {
+                    const textAreas = window.parent.document.querySelectorAll('textarea');
+                    if (textAreas.length > 0) {
+                        textAreas[0].value = transcript;
+                        textAreas[0].dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                } catch(e) { console.log("Direct injection restricted. Relying on backup param loop."); }
+
+                // Backup pipeline: update Streamlit engine application query state to lock value securely
+                const newUrl = new URL(window.parent.location.href);
+                newUrl.searchParams.set('voice_input', transcript);
+                window.parent.location.href = newUrl.toString();
             };
             
             recognition.onerror = (event) => {
@@ -306,15 +312,17 @@ else:
     """
     components.html(voice_component, height=100)
 
-    # Core user input diagnostic forms
-    symptoms = st.text_area("Symptoms Box (Review or edit your symptoms here):", height=150)
+    # Core user input text area accepts default string value from our voice parameter
+    symptoms = st.text_area("Symptoms Box (Review or edit your symptoms here):", value=voice_value, height=150)
     days = st.number_input("How many days have you experienced these symptoms?", min_value=1, max_value=365, value=1)
 
     if st.button("Run Diagnostic Prediction", use_container_width=True):
         if not symptoms.strip():
             st.warning("Please supply descriptive symptom details inside the field box before querying calculations.")
         else:
-            # Inference execution loop pass
+            # Clear query parameters after successful submission
+            st.query_params.clear()
+            
             prediction = model.predict([symptoms])[0]
 
             try:
@@ -326,12 +334,10 @@ else:
             severity = calculate_severity(days)
             report_id = generate_report_id()
 
-            # Wikipedia encyclopedic live lookup validation logic
             url, topic, wiki_description = wiki_search(prediction)
             if not wiki_description:
                 wiki_description = "No specific reference medical documentation found within external encyclopedia pipelines."
 
-            # Render output cards and diagnostic statistics data counters
             st.success(f"🦠 Predicted Condition Diagnosis: **{prediction}**")
 
             col1, col2 = st.columns(2)
@@ -343,13 +349,11 @@ else:
 
             st.markdown("---")
 
-            # Reference overview summary block cards 
             st.subheader("📚 Automated Medical Reference Insight")
             st.info(wiki_description)
             if url:
                 st.markdown(f"🔗 [Explore the full Wikipedia article on {topic}]({url})")
 
-            # Precaution directions loops
             st.subheader("🛡️ Recommended Precaution Guidelines")
             precautions_list = disease_precautions.get(prediction, [
                 "Consult a qualified doctor immediately",
@@ -362,13 +366,9 @@ else:
 
             st.markdown("---")
 
-            # --------------------------
-            # REPORT DOWNLOAD TRIGGER SECTION
-            # --------------------------
             st.subheader("📄 Export Assessment Documentation")
-            st.write("Generate and download a comprehensive clinical-grade PDF assessment report for your personal records or physician review:")
+            st.write("Generate and download a comprehensive clinical-grade PDF assessment report for your records:")
             
-            # Construct byte-stream buffers from active form variables
             pdf_report_buffer = create_pdf(
                 st.session_state.p_name,
                 st.session_state.p_age,
@@ -381,7 +381,6 @@ else:
                 wiki_description,
             )
 
-            # Core layout deployment handler link button to trigger download streaming
             st.download_button(
                 label="📄 Download Full Assessment Report (PDF)",
                 data=pdf_report_buffer,
