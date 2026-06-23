@@ -1,9 +1,7 @@
 from datetime import datetime
 from io import BytesIO
 import random
-import sqlite3
 import uuid
-import webbrowser
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet
@@ -20,28 +18,6 @@ st.set_page_config(
 )
 
 # --------------------------
-# DATABASE
-# --------------------------
-conn = sqlite3.connect("patients.db", check_same_thread=False)
-cursor = conn.cursor()
-
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS patients (
-        report_id TEXT,
-        patient_id TEXT,
-        patient_name TEXT,
-        age INTEGER,
-        gender TEXT,
-        symptoms TEXT,
-        prediction TEXT,
-        confidence REAL,
-        timestamp TEXT
-    )
-""")
-conn.commit()
-
-
-# --------------------------
 # LOAD MODEL
 # --------------------------
 @st.cache_resource
@@ -55,14 +31,6 @@ model = load_model()
 # --------------------------
 # UTILITIES & WIKIPEDIA FUNCTIONS
 # --------------------------
-def generate_patient_id():
-    return "PAT-" + str(uuid.uuid4())[:8].upper()
-
-
-def generate_report_id():
-    return "REP-" + datetime.now().strftime("%Y%m%d%H%M%S")
-
-
 def calculate_severity(days):
     if days <= 2:
         return "Low"
@@ -77,7 +45,6 @@ def wiki_search(query):
         user_agent="AISymptomCheckerSearch/1.0 (contact: your-email@example.com)",
         language="en",
     )
-
     try:
         page = wiki_wiki.page(query)
         if page.exists():
@@ -170,11 +137,9 @@ disease_precautions = {
 
 
 # --------------------------
-# PDF REPORT
+# PDF REPORT GENERATOR
 # --------------------------
-def create_pdf(
-    patient_name, patient_id, symptoms, prediction, confidence, severity, wiki_desc
-):
+def create_pdf(symptoms, prediction, confidence, severity, wiki_desc):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     styles = getSampleStyleSheet()
@@ -182,19 +147,17 @@ def create_pdf(
 
     elements.append(Paragraph("AI Symptom Checker Report", styles["Title"]))
     elements.append(Spacer(1, 10))
-    elements.append(Paragraph(f"Patient Name: {patient_name}", styles["Normal"]))
-    elements.append(Paragraph(f"Patient ID: {patient_id}", styles["Normal"]))
-    elements.append(Paragraph(f"Symptoms: {symptoms}", styles["Normal"]))
-    elements.append(Paragraph(f"Prediction: {prediction}", styles["Normal"]))
-    elements.append(Paragraph(f"Confidence: {confidence}%", styles["Normal"]))
-    elements.append(Paragraph(f"Severity: {severity}", styles["Normal"]))
+    elements.append(Paragraph(f"Symptoms Analyzed: {symptoms}", styles["Normal"]))
+    elements.append(Paragraph(f"Predicted Diagnosis: {prediction}", styles["Normal"]))
+    elements.append(Paragraph(f"Model Confidence: {confidence}%", styles["Normal"]))
+    elements.append(Paragraph(f"Estimated Severity: {severity}", styles["Normal"]))
     elements.append(Spacer(1, 10))
 
-    elements.append(Paragraph("About This Condition (Wikipedia):", styles["Heading2"]))
+    elements.append(Paragraph("Condition Details (Wikipedia Summary):", styles["Heading2"]))
     elements.append(Paragraph(wiki_desc, styles["Normal"]))
     elements.append(Spacer(1, 6))
 
-    elements.append(Paragraph("Recommended Action & Precautions:", styles["Heading2"]))
+    elements.append(Paragraph("Recommended Action Plan & Precautions:", styles["Heading2"]))
     precautions = disease_precautions.get(
         prediction,
         [
@@ -209,7 +172,7 @@ def create_pdf(
         elements.append(Paragraph(f"{i}. {p}", styles["Normal"]))
 
     elements.append(Spacer(1, 10))
-    elements.append(Paragraph(f"Generated: {datetime.now()}", styles["Normal"]))
+    elements.append(Paragraph(f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles["Normal"]))
 
     doc.build(elements)
     buffer.seek(0)
@@ -217,211 +180,92 @@ def create_pdf(
 
 
 # --------------------------
-# SIDEBAR
+# MAIN SYMPTOM CHECKER INTERFACE
 # --------------------------
-menu = st.sidebar.radio(
-    "Menu", ["Patient Registration", "Symptom Checker", "Patient History"]
-)
+st.title("🩺 AI Symptom Checker")
+st.write("Input your active symptoms below to receive a machine learning diagnosis prediction and reference material.")
 
-# --------------------------
-# PATIENT REGISTRATION
-# --------------------------
-if menu == "Patient Registration":
-    st.title("🏥 Patient Registration")
+# Core diagnostic input parameters
+symptoms = st.text_area("Describe Symptoms (e.g., high fever, shivering, cough)", height=150)
+days = st.number_input("How many days have you experienced these symptoms?", min_value=1, max_value=365, value=1)
 
-    if "patient_id" not in st.session_state:
-        st.session_state.patient_id = generate_patient_id()
-
-    name = st.text_input("Patient Name")
-
-    st.text_input(
-        "Patient ID", value=st.session_state.patient_id, disabled=True
-    )
-
-    age = st.number_input("Age", min_value=1, max_value=120, value=25)
-    gender = st.selectbox("Gender", ["Male", "Female", "Other"])
-
-    if st.button("Register"):
-        st.session_state.name = name
-        st.session_state.age = age
-        st.session_state.gender = gender
-        st.success("✅ Registration Successful")
-
-# --------------------------
-# SYMPTOM CHECKER
-# --------------------------
-elif menu == "Symptom Checker":
-    st.title("🩺 AI Symptom Checker")
-
-    symptoms = st.text_area("Enter Symptoms")
-    days = st.number_input("Days", min_value=1, max_value=365, value=1)
-
-    if st.button("Predict"):
-        if not symptoms.strip():
-            st.warning("Please enter your symptoms before predicting.")
-        else:
-            prediction = model.predict([symptoms])[0]
-
-            try:
-                probs = model.predict_proba([symptoms])[0]
-                confidence = round(max(probs) * 100, 2)
-            except Exception:
-                confidence = round(random.uniform(85, 99), 2)
-
-            severity = calculate_severity(days)
-            report_id = generate_report_id()
-
-            # Dynamic prediction background context via Wikipedia API
-            url, topic, wiki_description = wiki_search(prediction)
-            if not wiki_description:
-                wiki_description = "No specific data returned from reference encyclopedias for this match."
-
-            # Results
-            st.success(f"🦠 Predicted Disease: **{prediction}**")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Confidence", f"{confidence}%")
-            with col2:
-                severity_color = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}
-                st.metric(
-                    "Severity", f"{severity_color.get(severity, '')} {severity}"
-                )
-
-            st.markdown("---")
-
-            # Display Wikipedia summary for automated prediction
-            st.subheader("📚 Reference Insight")
-            st.info(wiki_description)
-
-            # Precautions
-            st.subheader("🛡️ Recommended Precautions")
-            precautions_list = disease_precautions.get(
-                prediction,
-                [
-                    "Consult a qualified doctor immediately",
-                    "Drink plenty of water and rest well",
-                    "Avoid self-medication without professional advice",
-                    "Monitor symptoms and seek emergency help if worsening",
-                ],
-            )
-            for i, p in enumerate(precautions_list, 1):
-                st.markdown(f"**{i}.** ✅ {p}")
-
-            st.markdown("---")
-
-            # Save to SQLite DB
-            cursor.execute(
-                "INSERT INTO patients VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    report_id,
-                    st.session_state.get("patient_id", ""),
-                    st.session_state.get("name", ""),
-                    st.session_state.get("age", 0),
-                    st.session_state.get("gender", ""),
-                    symptoms,
-                    prediction,
-                    confidence,
-                    str(datetime.now()),
-                ),
-            )
-            conn.commit()
-
-            # PDF build & download action trigger
-            pdf = create_pdf(
-                st.session_state.get("name", ""),
-                st.session_state.get("patient_id", ""),
-                symptoms,
-                prediction,
-                confidence,
-                severity,
-                wiki_description,
-            )
-
-            st.download_button(
-                "📄 Download Full Report (PDF)",
-                pdf,
-                "medical_report.pdf",
-                "application/pdf",
-            )
-
-# --------------------------
-# PATIENT HISTORY
-# --------------------------
-elif menu == "Patient History":
-    st.title("📋 Patient History")
-
-    data = cursor.execute("SELECT * FROM patients").fetchall()
-
-    if data:
-        for row in data:
-            with st.expander(
-                f"🗂️ Report: {row[0]} | Patient: {row[2]} | Disease: {row[6]}"
-            ):
-                st.write(f"**Patient ID:** {row[1]}")
-                st.write(f"**Name:** {row[2]}")
-                st.write(f"**Age:** {row[3]} | **Gender:** {row[4]}")
-                st.write(f"**Symptoms:** {row[5]}")
-                st.write(f"**Prediction:** {row[6]}")
-                st.write(f"**Confidence:** {row[7]}%")
-                st.write(f"**Timestamp:** {row[8]}")
+if st.button("Run Diagnostic Prediction", use_container_width=True):
+    if not symptoms.strip():
+        st.warning("Please enter your current symptoms before requesting a prediction.")
     else:
-        st.info("No patient records found.")
+        # Machine learning inference loop execution
+        prediction = model.predict([symptoms])[0]
 
+        try:
+            probs = model.predict_proba([symptoms])[0]
+            confidence = round(max(probs) * 100, 2)
+        except Exception:
+            confidence = round(random.uniform(85, 99), 2)
 
-# --------------------------
-# INTERACTIVE WIKIPEDIA CHATBOT
-# --------------------------
-st.markdown("---")
-st.subheader("🤖 Wikipedia Medical AI Chatbot")
+        severity = calculate_severity(days)
 
-# Initialize chat history state so it stays on screen during interactions
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = [
-        {
-            "role": "assistant",
-            "content": "Hello! I am your live Wikipedia assistant. Type any condition or term here to chat about it.",
-        }
-    ]
+        # Dynamic query pipeline retrieval from Wikipedia API
+        url, topic, wiki_description = wiki_search(prediction)
+        if not wiki_description:
+            wiki_description = "No specific reference medical documentation found within external encyclopedia pipelines."
 
-# Render existing chat logs
-for msg in st.session_state.chat_history:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+        # Metrics layout blocks
+        st.success(f"🦠 Predicted Condition: **{prediction}**")
 
-# User Chat Input Element
-if chat_user_query := st.chat_input("Ask me about any disease or medical term..."):
-    # Render user query instantly
-    with st.chat_message("user"):
-        st.markdown(chat_user_query)
-    st.session_state.chat_history.append({"role": "user", "content": chat_user_query})
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Prediction Confidence", f"{confidence}%")
+        with col2:
+            severity_color = {"Low": "🟢", "Medium": "🟡", "High": "🔴"}
+            st.metric(
+                "Condition Severity", f"{severity_color.get(severity, '')} {severity}"
+            )
 
-    # Generate chatbot response
-    with st.chat_message("assistant"):
-        with st.spinner("Searching medical Wikipedia files..."):
-            url, topic, summary = wiki_search(chat_user_query)
+        st.markdown("---")
 
-            if url:
-                bot_reply = (
-                    f"**Topic Match Found:** [{topic}]({url})\n\n"
-                    f"{summary}\n\n"
-                    f"🔗 _Click [here]({url}) to open the full official page in a new tab._"
-                )
-            else:
-                bot_reply = (
-                    f"I couldn't locate a precise text document for '{chat_user_query}'. "
-                    f"Try querying accurate scientific words (e.g., 'Gastroenteritis' instead of 'stomach bug')."
-                )
-            st.markdown(bot_reply)
-            
-    # Append to state history
-    st.session_state.chat_history.append({"role": "assistant", "content": bot_reply})
+        # Wikipedia Article Snip Display Card
+        st.subheader("📚 Automated Medical Reference Insight")
+        st.info(wiki_description)
+        if url:
+            st.markdown(f"🔗 [Explore the full Wikipedia article on {topic}]({url})")
 
+        # Precaution mapping output rendering 
+        st.subheader("🛡️ Recommended Precaution Guidelines")
+        precautions_list = disease_precautions.get(
+            prediction,
+            [
+                "Consult a qualified doctor immediately",
+                "Drink plenty of water and rest well",
+                "Avoid self-medication without professional advice",
+                "Monitor symptoms and seek emergency help if worsening",
+            ],
+        )
+        for i, p in enumerate(precautions_list, 1):
+            st.markdown(f"**{i}.** ✅ {p}")
+
+        st.markdown("---")
+
+        # Generated Downloadable PDF Document stream
+        pdf = create_pdf(
+            symptoms,
+            prediction,
+            confidence,
+            severity,
+            wiki_description,
+        )
+
+        st.download_button(
+            "📄 Download Official Assessment Report (PDF)",
+            pdf,
+            "medical_report.pdf",
+            "application/pdf",
+            use_container_width=True,
+        )
 
 # --------------------------
 # FOOTER
 # --------------------------
 st.markdown("---")
 st.caption(
-    "AI Symptom Checker | Streamlit + Machine Learning Inference + Live Wiki Chatbot Pipeline"
+    "AI Symptom Checker Core Engine | Optimized Machine Learning & Wikipedia Pipeline View"
 )
