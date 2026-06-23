@@ -1,0 +1,43 @@
+# requirements.txt — ML Clustering Project
+# Notes:
+# - Lines starting with '#' are comments and will be ignored by pip.
+# - Verified to work well on Windows with Python 3.10–3.12.
+# - If a package fails to build on your system, comment it out and re-run `pip install -r requirements.txt`.
+
+# Core scientific stack
+numpy
+pandas
+scipy
+joblib
+tqdm
+
+# Clustering + neighbors
+scikit-learn
+scikit-learn-extra      # k-medoids, constrained k-means, etc.
+hdbscan                 # density-based clustering (robust, popular)
+umap-learn              # dimensionality reduction for clustering/visualization
+pyclustering            # additional clustering algorithms
+
+# Visualization
+matplotlib
+seaborn
+plotly
+yellowbrick             # model diagnostics/cluster visualization
+
+# I/O helpers
+openpyxl                # read/write Excel files
+pyyaml
+
+# App/serving (optional, if you plan to demo/deploy)
+streamlit
+fastapi
+uvicorn
+pydantic
+cloudpickle
+
+# Optional: large-scale vector search (uncomment if needed)
+# faiss-cpu
+
+# Optional: GPU-accelerated UMAP/HDBSCAN via RAPIDS (Linux/conda recommended)
+# cuml-cu12
+# cugraph-cu12
